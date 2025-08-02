@@ -31,12 +31,13 @@ INSTALL_DATA = $(INSTALL) -m 644
 SHELL = /bin/sh
 CAN_RUN_INSTALLINFO = $(SHELL) -c "install-info --version" > /dev/null 2>&1
 
-objs = buffer.o carg_parser.o global.o io.o main.o main_loop.o regex.o signal.o
+objs = buffer.o carg_parser.o global.o io.o main.o main_loop.o macro.o regex.o signal.o
 
 
 .PHONY : all install install-bin install-info install-man-base install-man \
          install-strip install-compress install-strip-compress \
          install-bin-strip install-info-compress install-man-compress \
+         install-personal \
          uninstall uninstall-bin uninstall-info uninstall-man \
          doc info man check dist clean distclean
 
@@ -161,6 +162,14 @@ dist : doc
 	  $(DISTNAME)/testsuite/*.err
 	rm -f $(DISTNAME)
 	lzip -v -9 $(DISTNAME).tar
+
+# Install to personal ~/bin directory
+install-personal : all
+	@echo "Installing ed with macro support to ~/bin"
+	@mkdir -p $(HOME)/bin
+	cp ./$(progname) $(HOME)/bin/$(progname)
+	cp ./r$(progname) $(HOME)/bin/r$(progname)
+	@echo "Installation complete! Make sure $(HOME)/bin is in your PATH."
 
 clean :
 	-rm -f $(progname) r$(progname) $(objs)

@@ -153,3 +153,15 @@ void set_signals( void );
 void set_window_lines( const int lines );
 int window_columns( void );
 int window_lines( void );
+
+/* macro system functions */
+typedef struct macro {
+    char *sequence;
+    char *command;
+    struct macro *next;
+} macro_t;
+
+bool load_macros( const char * const filename );
+const char * find_macro( const char * const sequence );
+const char * expand_macro_line( const char * const input_line );
+void free_macros( void );

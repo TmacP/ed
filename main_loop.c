@@ -767,6 +767,10 @@ int main_loop( const bool initial_error, const bool loose )
     if( prompt_on ) { fputs( prompt_str, stdout ); fflush( stdout ); }
     ibufp = get_stdin_line( &len );
     if( !ibufp ) return 2;			/* an error happened */
+    
+    /* Expand macros if input starts with escape sequence */
+    if( len > 0 ) ibufp = expand_macro_line( ibufp );
+    
     if( len <= 0 )				/* EOF on stdin ('q') */
       {
       if( !modified() || status == EMOD ) status = QUIT;

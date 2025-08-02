@@ -271,6 +271,17 @@ int main( const int argc, const char * const argv[] )
   setlocale( LC_ALL, "" );
   if( !init_buffers() ) return 1;
 
+  /* Load macros from ~/.ed_macros */
+  { 
+    const char * const hd = home_directory();
+    if( hd )
+      {
+      static char macro_file[512];
+      snprintf( macro_file, sizeof(macro_file), "%s/.ed_macros", hd );
+      load_macros( macro_file );
+      }
+  }
+
   const char * start_re_arg = 0;		/* '+/RE' or '+?RE' */
   int start_addr = 0;				/* '+line' */
   for( ; argind < ap_arguments( &parser ); ++argind )
