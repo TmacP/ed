@@ -666,6 +666,18 @@ pflabel:      if( !check_addr_range2( addr_cnt ) ||
                     pflags ) ) return ERR;
               pflags = 0;
               break;
+    case 'Z': if( !check_second_addr( current_addr(), addr_cnt ) )
+                return ERR;
+              if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
+              /* Page up: print lines above current position */
+              if( second_addr <= 1 )
+                { set_error_msg( "No previous page" ); return ERR; }
+              int start_addr = max( 1, second_addr - window_lines() );
+              int end_addr = second_addr - 1;
+              if( !print_lines( start_addr, end_addr, pflags ) ) return ERR;
+              set_current_addr( start_addr );  /* set current to start of printed range */
+              pflags = 0;
+              break;
     case '=': if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               printf( "%d\n", addr_cnt ? second_addr : last_addr() );
               break;

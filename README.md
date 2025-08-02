@@ -19,9 +19,9 @@
     
     Perfect for quick indentation without repeatedly pressing spacebar.
 
-## Planned Features
-
-- **Page Navigation:**  
-    - `z` for page down  
-    - Add a page up counterpart
+- **Page Navigation:** Enhanced page navigation commands.
+    - `z` for page down (default ed behavior)
+    - `Z` for page up (new feature)
+    
+    Navigate through large files more efficiently.
 
