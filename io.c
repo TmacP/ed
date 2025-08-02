@@ -178,13 +178,51 @@ const char * get_stdin_line( int * const sizep )
       }
     else
       {
-      /* Handle escape sequences more robustly */
+      /* Handle escape sequences safely */
       if( c == '\033' )  /* ESC character */
         {
-        /* Always just treat ESC as a normal character - no special processing */
-        buf[i++] = c;
-        if( c == 0 ) set_binary();
-        continue;
+        /* Look ahead for number pattern for space insertion */
+        int next_c = getchar();
+        if( next_c >= '0' && next_c <= '9' )
+          {
+          int count = next_c - '0';
+          /* Read additional digits with safety limit */
+          int digit_count = 1;
+          while( digit_count < 4 )  /* Limit to prevent overflow */
+            {
+            int digit_c = getchar();
+            if( digit_c >= '0' && digit_c <= '9' )
+              {
+              count = count * 10 + (digit_c - '0');
+              digit_count++;
+              if( count > 100 ) break;  /* Safety limit */
+              }
+            else
+              {
+              /* Put back the non-digit character */
+              if( digit_c != EOF ) ungetc( digit_c, stdin );
+              break;
+              }
+            }
+          
+          /* Insert spaces with safety check */
+          if( count > 0 && count <= 100 )
+            {
+            if( !resize_buffer( &buf, &bufsz, i + count + 1 ) ) 
+              { *sizep = 0; return 0; }
+            for( int j = 0; j < count; j++ )
+              buf[i++] = ' ';
+            }
+          continue;
+        }
+        else
+          {
+          /* Not a number sequence, treat ESC as literal */
+          if( next_c != EOF ) ungetc( next_c, stdin );
+          buf[i++] = c;
+          if( c == 0 ) set_binary();
+          continue;
+          }
         }
       else
         {
