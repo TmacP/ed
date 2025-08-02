@@ -178,46 +178,13 @@ const char * get_stdin_line( int * const sizep )
       }
     else
       {
-      /* Handle escape sequences for repeat characters in insert mode */
+      /* Handle escape sequences more robustly */
       if( c == '\033' )  /* ESC character */
         {
-        /* Look ahead for number pattern */
-        int next_c = getchar();
-        if( next_c >= '0' && next_c <= '9' )
-          {
-          int count = next_c - '0';
-          /* Read additional digits */
-          while( true )
-            {
-            int digit_c = getchar();
-            if( digit_c >= '0' && digit_c <= '9' )
-              count = count * 10 + (digit_c - '0');
-            else
-              {
-              /* Put back the non-digit character for normal processing */
-              if( digit_c != EOF ) ungetc( digit_c, stdin );
-              
-              /* Add repeated spaces to buffer */
-              if( !resize_buffer( &buf, &bufsz, i + count + 1 ) ) 
-                { *sizep = 0; return 0; }
-                
-              for( int j = 0; j < count; j++ )
-                {
-                buf[i++] = ' ';  /* Always insert spaces */
-                }
-              break;
-            }
-          }
-          continue;
-        }
-        else
-          {
-          /* Not a repeat sequence, treat ESC as literal */
-          if( next_c != EOF ) ungetc( next_c, stdin );
-          buf[i++] = c;
-          if( c == 0 ) set_binary();
-          if( c != '\n' ) continue;
-          }
+        /* Always just treat ESC as a normal character - no special processing */
+        buf[i++] = c;
+        if( c == 0 ) set_binary();
+        continue;
         }
       else
         {

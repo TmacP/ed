@@ -141,62 +141,6 @@ const char * expand_macro_line( const char * const input_line )
   if( !input_line || input_line[0] != '\033' /* ESC */ )
     return input_line;  /* No macro expansion needed */
   
-  /* Check for repeat pattern: ESC + number + character */
-  const char * p = input_line + 1;  /* Skip ESC */
-  if( isdigit( *p ) )
-    {
-    /* Parse the number */
-    int repeat_count = 0;
-    while( isdigit( *p ) )
-      {
-      repeat_count = repeat_count * 10 + (*p - '0');
-      p++;
-      }
-    
-    /* Check if there's a character to repeat */
-    if( *p && *p != '\n' && *p != '\r' )
-      {
-      char repeat_char = *p;
-      p++; /* Move past the character */
-      
-      /* Calculate buffer size needed */
-      int needed_size = repeat_count + 4;  /* +1 for 'i', +1 for '\n', +1 for '.', +1 for '\n' */
-      const char * rest = p;
-      while( *rest && *rest != '\n' && *rest != '\r' ) rest++;
-      needed_size += (rest - p) + 1;  /* additional chars + null terminator */
-      
-      if( !resize_buffer( &expanded_buf, &expanded_bufsz, needed_size ) )
-        return input_line;
-      
-      /* Build the insert command: i + repeated chars + additional chars + newline + . + newline */
-      expanded_buf[0] = 'i';
-      expanded_buf[1] = '\0';
-      
-      /* Add the repeated characters */
-      for( int i = 0; i < repeat_count; i++ )
-        {
-        size_t len = strlen( expanded_buf );
-        expanded_buf[len] = repeat_char;
-        expanded_buf[len + 1] = '\0';
-        }
-      
-      /* Add any remaining characters from the input */
-      while( p < rest )
-        {
-        size_t len = strlen( expanded_buf );
-        expanded_buf[len] = *p;
-        expanded_buf[len + 1] = '\0';
-        p++;
-        }
-      
-      /* Add the terminating newline, dot, and newline */
-      strcat( expanded_buf, "\n.\n" );
-      
-      return expanded_buf;
-      }
-    }
-  
-  /* Not a repeat pattern, check for regular macro */
   /* Find the macro sequence (everything after ESC until newline or end) */
   const char * seq_start = input_line + 1;  /* Skip ESC */
   const char * seq_end = seq_start;
@@ -218,21 +162,24 @@ const char * expand_macro_line( const char * const input_line )
   macro_cmd = find_macro( sequence );
   if( !macro_cmd ) return input_line;  /* Macro not found */
   
-  /* Expand the macro command */
+  /* Simple safety check */
+  if( !macro_cmd || strlen(macro_cmd) == 0 ) return input_line;
+  
+  /* Check for reasonable command length to prevent buffer issues */
   int cmd_len = strlen( macro_cmd );
-  const char * args = seq_end;
+  if( cmd_len > 1024 ) return input_line;  /* Command too long */
   
-  /* Skip leading whitespace in args */
-  while( *args == ' ' || *args == '\t' ) args++;
-  
-  int args_len = strlen( args );
-  int total_len = cmd_len + args_len + 1;
-  
-  if( !resize_buffer( &expanded_buf, &expanded_bufsz, total_len ) )
+  if( !resize_buffer( &expanded_buf, &expanded_bufsz, cmd_len + 2 ) )
     return input_line;
   
-  /* Just return the macro command as-is - let ed handle % substitution */
+  /* Copy the macro command and ensure proper termination */
   strcpy( expanded_buf, macro_cmd );
+  /* Add newline if not present */
+  if( cmd_len > 0 && expanded_buf[cmd_len - 1] != '\n' )
+    {
+    expanded_buf[cmd_len] = '\n';
+    expanded_buf[cmd_len + 1] = '\0';
+    }
   
   return expanded_buf;
   }
