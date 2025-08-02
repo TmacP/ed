@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include "ed.h"
 
@@ -140,6 +141,62 @@ const char * expand_macro_line( const char * const input_line )
   if( !input_line || input_line[0] != '\033' /* ESC */ )
     return input_line;  /* No macro expansion needed */
   
+  /* Check for repeat pattern: ESC + number + character */
+  const char * p = input_line + 1;  /* Skip ESC */
+  if( isdigit( *p ) )
+    {
+    /* Parse the number */
+    int repeat_count = 0;
+    while( isdigit( *p ) )
+      {
+      repeat_count = repeat_count * 10 + (*p - '0');
+      p++;
+      }
+    
+    /* Check if there's a character to repeat */
+    if( *p && *p != '\n' && *p != '\r' )
+      {
+      char repeat_char = *p;
+      p++; /* Move past the character */
+      
+      /* Calculate buffer size needed */
+      int needed_size = repeat_count + 4;  /* +1 for 'i', +1 for '\n', +1 for '.', +1 for '\n' */
+      const char * rest = p;
+      while( *rest && *rest != '\n' && *rest != '\r' ) rest++;
+      needed_size += (rest - p) + 1;  /* additional chars + null terminator */
+      
+      if( !resize_buffer( &expanded_buf, &expanded_bufsz, needed_size ) )
+        return input_line;
+      
+      /* Build the insert command: i + repeated chars + additional chars + newline + . + newline */
+      expanded_buf[0] = 'i';
+      expanded_buf[1] = '\0';
+      
+      /* Add the repeated characters */
+      for( int i = 0; i < repeat_count; i++ )
+        {
+        size_t len = strlen( expanded_buf );
+        expanded_buf[len] = repeat_char;
+        expanded_buf[len + 1] = '\0';
+        }
+      
+      /* Add any remaining characters from the input */
+      while( p < rest )
+        {
+        size_t len = strlen( expanded_buf );
+        expanded_buf[len] = *p;
+        expanded_buf[len + 1] = '\0';
+        p++;
+        }
+      
+      /* Add the terminating newline, dot, and newline */
+      strcat( expanded_buf, "\n.\n" );
+      
+      return expanded_buf;
+      }
+    }
+  
+  /* Not a repeat pattern, check for regular macro */
   /* Find the macro sequence (everything after ESC until newline or end) */
   const char * seq_start = input_line + 1;  /* Skip ESC */
   const char * seq_end = seq_start;
