@@ -231,44 +231,8 @@ const char * expand_macro_line( const char * const input_line )
   if( !resize_buffer( &expanded_buf, &expanded_bufsz, total_len ) )
     return input_line;
   
-  /* Build the expanded command */
+  /* Just return the macro command as-is - let ed handle % substitution */
   strcpy( expanded_buf, macro_cmd );
-  
-  /* Replace % with arguments if present */
-  char * percent_pos = strstr( expanded_buf, "%" );
-  if( percent_pos && args_len > 0 )
-    {
-    /* Calculate new length with % substitution */
-    char * temp_buf = 0;
-    int temp_bufsz = 0;
-    int new_len = strlen( expanded_buf ) - 1 + args_len + 1;  /* -1 for %, +1 for null */
-    
-    if( !resize_buffer( &temp_buf, &temp_bufsz, new_len ) )
-      return input_line;
-    
-    /* Copy everything before % */
-    *percent_pos = 0;
-    strcpy( temp_buf, expanded_buf );
-    
-    /* Add the arguments */
-    strcat( temp_buf, args );
-    
-    /* Add everything after % */
-    strcat( temp_buf, percent_pos + 1 );
-    
-    /* Resize and copy back to expanded_buf */
-    if( !resize_buffer( &expanded_buf, &expanded_bufsz, strlen(temp_buf) + 1 ) )
-      return input_line;
-    strcpy( expanded_buf, temp_buf );
-    
-    free( temp_buf );
-    }
-  else if( args_len > 0 )
-    {
-    /* No % found, just append args with a space */
-    strcat( expanded_buf, " " );
-    strcat( expanded_buf, args );
-    }
   
   return expanded_buf;
   }
