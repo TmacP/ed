@@ -20,6 +20,10 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <termios.h>
+#include <unistd.h>
+#include <ctype.h>
+#include <stdlib.h>
 
 #include "ed.h"
 
@@ -405,4 +409,184 @@ int write_file( const char * const filename, const char * const mode,
       set_error_msg( "Cannot close output file" ); return -1; }
   if( !scripted() ) printf( "%lu\n", size );
   return ( from && from <= to ) ? to - from + 1 : 0;
+  }
+
+
+/* Terminal control for interactive line editing */
+static struct termios orig_termios;
+static bool raw_mode_enabled = false;
+
+static void disable_raw_mode( void )
+  {
+  if( raw_mode_enabled )
+    {
+    tcsetattr( STDIN_FILENO, TCSAFLUSH, &orig_termios );
+    raw_mode_enabled = false;
+    }
+  }
+
+static bool enable_raw_mode( void )
+  {
+  if( !isatty( STDIN_FILENO ) ) return false;
+  
+  if( tcgetattr( STDIN_FILENO, &orig_termios ) == -1 ) return false;
+  atexit( disable_raw_mode );
+  
+  struct termios raw = orig_termios;
+  raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
+  raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+  raw.c_oflag &= ~(OPOST);
+  raw.c_cflag |= (CS8);
+  raw.c_cc[VMIN] = 1;
+  raw.c_cc[VTIME] = 0;
+  
+  if( tcsetattr( STDIN_FILENO, TCSAFLUSH, &raw ) == -1 ) return false;
+  raw_mode_enabled = true;
+  return true;
+  }
+
+/* Interactive line editor for current line */
+bool edit_current_line_interactive( void )
+  {
+  if( current_addr() <= 0 ) { set_error_msg( "No current line" ); return false; }
+  
+  const line_t * const lp = search_line_node( current_addr() );
+  if( !lp ) { set_error_msg( "Invalid line" ); return false; }
+  
+  /* Copy current line content to buffer */
+  char buffer[4096];
+  int len = lp->len;
+  if( len >= (int)sizeof(buffer) - 1 ) 
+    { set_error_msg( "Line too long for interactive editing" ); return false; }
+  
+  memcpy( buffer, get_sbuf_line( lp ), len );
+  buffer[len] = '\0';
+  
+  /* Remove trailing newline if present */
+  if( len > 0 && buffer[len-1] == '\n' )
+    {
+    buffer[len-1] = '\0';
+    len--;
+    }
+  
+  int cursor_pos = len;  /* Start cursor at end of line */
+  bool modified = false;
+  
+  if( !enable_raw_mode() )
+    { set_error_msg( "Cannot enable interactive mode" ); return false; }
+  
+  /* Display initial line */
+  printf( "\rEdit line %d: %s", current_addr(), buffer );
+  printf( "\r              " );  /* Move to start of content */
+  for( int i = 0; i < cursor_pos; i++ ) putchar( buffer[i] );
+  fflush( stdout );
+  
+  while( true )
+    {
+    int c = getchar();
+    
+    switch( c )
+      {
+      case 27: /* ESC sequence or plain ESC */
+        {
+        int next1 = getchar();
+        if( next1 == '[' )
+          {
+          int next2 = getchar();
+          switch( next2 )
+            {
+            case 'C': /* Right arrow */
+              if( cursor_pos < len ) cursor_pos++;
+              break;
+            case 'D': /* Left arrow */
+              if( cursor_pos > 0 ) cursor_pos--;
+              break;
+            case 'H': /* Home */
+              cursor_pos = 0;
+              break;
+            case 'F': /* End */
+              cursor_pos = len;
+              break;
+            }
+          }
+        else
+          {
+          /* Plain ESC - put back the character and exit without saving */
+          if( next1 != EOF ) ungetc( next1, stdin );
+          disable_raw_mode();
+          printf( "\n" );
+          return true;  /* Return true but don't save changes */
+          }
+        break;
+        }
+        
+      case '\r': /* Enter - save changes */
+      case '\n':
+        disable_raw_mode();
+        printf( "\n" );
+        if( modified )
+          {
+          /* Add newline back for ed format */
+          if( len < (int)sizeof(buffer) - 1 )
+            {
+            buffer[len] = '\n';
+            len++;
+            }
+          buffer[len] = '\0';
+          
+          /* Replace the current line using ed's normal mechanism */
+          /* Store the buffer content in scratch buffer */
+          if( !put_sbuf_line( buffer, len ) )
+            return false;
+          /* Delete the old line */
+          if( !delete_lines( current_addr(), current_addr(), false ) )
+            return false;
+          /* Add the new line */  
+          if( !put_lines( current_addr() ) )
+            return false;
+          }
+        return true;
+        
+      case 127: /* Backspace */
+      case 8:   /* Ctrl+H */
+        if( cursor_pos > 0 )
+          {
+          memmove( buffer + cursor_pos - 1, buffer + cursor_pos, 
+                   len - cursor_pos + 1 );
+          cursor_pos--;
+          len--;
+          modified = true;
+          }
+        break;
+        
+      case 4: /* Ctrl+D (Delete) */
+        if( cursor_pos < len )
+          {
+          memmove( buffer + cursor_pos, buffer + cursor_pos + 1, 
+                   len - cursor_pos );
+          len--;
+          modified = true;
+          }
+        break;
+        
+      default:
+        if( c >= 32 && c < 127 && len < (int)sizeof(buffer) - 2 )
+          {
+          /* Insert character */
+          memmove( buffer + cursor_pos + 1, buffer + cursor_pos, 
+                   len - cursor_pos + 1 );
+          buffer[cursor_pos] = c;
+          cursor_pos++;
+          len++;
+          modified = true;
+          }
+        break;
+      }
+    
+    /* Redraw line */
+    printf( "\rEdit line %d: %-80s", current_addr(), buffer );
+    printf( "\r              " );  /* Move to start of content */
+    for( int i = 0; i < cursor_pos; i++ ) putchar( buffer[i] );
+    fflush( stdout );
+    }
   }

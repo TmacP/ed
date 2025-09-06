@@ -154,6 +154,9 @@ void set_window_lines( const int lines );
 int window_columns( void );
 int window_lines( void );
 
+/* interactive line editing */
+bool edit_current_line_interactive( void );
+
 /* macro system functions */
 typedef struct macro {
     char *sequence;

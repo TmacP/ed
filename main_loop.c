@@ -496,6 +496,22 @@ static int exec_command( const char ** const ibufpp, const bool isglobal )
 
   if( addr_cnt < 0 ) return ERR;
   skip_blanks( ibufpp );
+  
+  /* Check for special INTERACTIVE_EDIT command from macro */
+  if( strncmp( *ibufpp, "INTERACTIVE_EDIT", 16 ) == 0 )
+    {
+    *ibufpp += 16;  /* Skip past command */
+    skip_blanks( ibufpp );
+    if( **ibufpp == '\n' || **ibufpp == '\0' )  /* End of command */
+      {
+      if( addr_cnt > 0 ) 
+        { set_error_msg( "Unexpected address" ); return ERR; }
+      if( !edit_current_line_interactive() ) return ERR;
+      return 0;
+      }
+    /* Fall through to normal command parsing if not end of line */
+    }
+  
   c = *(*ibufpp)++;
   switch( c )
     {
