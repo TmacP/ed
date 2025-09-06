@@ -567,7 +567,9 @@ bool edit_current_line_interactive( void )
           
           /* Replace the current line using ed's proper mechanism */
           const int curr_addr = current_addr();
-          undo_t * up = 0;
+          
+          /* Clear undo stack before the operation */
+          clear_undo_stack();
           
           disable_interrupts();
           
@@ -587,14 +589,6 @@ bool edit_current_line_interactive( void )
             {
             enable_interrupts();
             set_error_msg( "Cannot save line" );
-            return false;
-            }
-          
-          /* Create undo entry for the addition */
-          up = push_undo_atom( UADD, current_addr(), current_addr() );
-          if( !up )
-            {
-            enable_interrupts();
             return false;
             }
           
