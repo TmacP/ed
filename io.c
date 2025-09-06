@@ -476,9 +476,8 @@ bool edit_current_line_interactive( void )
     { set_error_msg( "Cannot enable interactive mode" ); return false; }
   
   /* Display initial line */
-  printf( "\rEdit line %d: %s", current_addr(), buffer );
-  printf( "\r              " );  /* Move to start of content */
-  for( int i = 0; i < cursor_pos; i++ ) putchar( buffer[i] );
+  printf( "%s", buffer );
+  /* Move cursor to end */
   fflush( stdout );
   
   while( true )
@@ -487,6 +486,34 @@ bool edit_current_line_interactive( void )
     
     switch( c )
       {
+      case 2: /* Ctrl+B - move back one word */
+        while( cursor_pos > 0 && buffer[cursor_pos-1] == ' ' )
+          {
+          printf( "\b" );
+          cursor_pos--;
+          }
+        while( cursor_pos > 0 && buffer[cursor_pos-1] != ' ' )
+          {
+          printf( "\b" );
+          cursor_pos--;
+          }
+        fflush( stdout );
+        break;
+        
+      case 6: /* Ctrl+F - move forward one word */
+        while( cursor_pos < len && buffer[cursor_pos] != ' ' )
+          {
+          printf( "%c", buffer[cursor_pos] );
+          cursor_pos++;
+          }
+        while( cursor_pos < len && buffer[cursor_pos] == ' ' )
+          {
+          printf( "%c", buffer[cursor_pos] );
+          cursor_pos++;
+          }
+        fflush( stdout );
+        break;
+        
       case 27: /* ESC sequence or plain ESC */
         {
         int next1 = getchar();
@@ -496,26 +523,30 @@ bool edit_current_line_interactive( void )
           switch( next2 )
             {
             case 'C': /* Right arrow */
-              if( cursor_pos < len ) cursor_pos++;
+              if( cursor_pos < len )
+                {
+                printf( "%c", buffer[cursor_pos] );
+                cursor_pos++;
+                fflush( stdout );
+                }
               break;
             case 'D': /* Left arrow */
-              if( cursor_pos > 0 ) cursor_pos--;
-              break;
-            case 'H': /* Home */
-              cursor_pos = 0;
-              break;
-            case 'F': /* End */
-              cursor_pos = len;
+              if( cursor_pos > 0 )
+                {
+                printf( "\b" );
+                cursor_pos--;
+                fflush( stdout );
+                }
               break;
             }
           }
         else
           {
-          /* Plain ESC - put back the character and exit without saving */
+          /* Plain ESC - cancel without saving */
           if( next1 != EOF ) ungetc( next1, stdin );
           disable_raw_mode();
           printf( "\n" );
-          return true;  /* Return true but don't save changes */
+          return true;  /* Don't save changes */
           }
         break;
         }
@@ -534,16 +565,40 @@ bool edit_current_line_interactive( void )
             }
           buffer[len] = '\0';
           
-          /* Replace the current line using ed's normal mechanism */
-          /* Store the buffer content in scratch buffer */
-          if( !put_sbuf_line( buffer, len ) )
+          /* Replace the current line using ed's proper mechanism */
+          const int curr_addr = current_addr();
+          undo_t * up = 0;
+          
+          disable_interrupts();
+          
+          /* Delete current line */
+          if( !delete_lines( curr_addr, curr_addr, false ) )
+            {
+            enable_interrupts();
             return false;
-          /* Delete the old line */
-          if( !delete_lines( current_addr(), current_addr(), false ) )
+            }
+          
+          /* Set current address to position before deleted line */
+          set_current_addr( curr_addr - 1 );
+          
+          /* Put the new line content directly */
+          const char * txt = put_sbuf_line( buffer, len );
+          if( !txt )
+            {
+            enable_interrupts();
+            set_error_msg( "Cannot save line" );
             return false;
-          /* Add the new line */  
-          if( !put_lines( current_addr() ) )
+            }
+          
+          /* Create undo entry for the addition */
+          up = push_undo_atom( UADD, current_addr(), current_addr() );
+          if( !up )
+            {
+            enable_interrupts();
             return false;
+            }
+          
+          enable_interrupts();
           }
         return true;
         
@@ -551,20 +606,38 @@ bool edit_current_line_interactive( void )
       case 8:   /* Ctrl+H */
         if( cursor_pos > 0 )
           {
+          /* Move cursor back, shift text left, and redraw */
+          printf( "\b" );
           memmove( buffer + cursor_pos - 1, buffer + cursor_pos, 
                    len - cursor_pos + 1 );
           cursor_pos--;
           len--;
+          /* Redraw from cursor to end, then clear extra char */
+          for( int i = cursor_pos; i < len; i++ )
+            printf( "%c", buffer[i] );
+          printf( " \b" );  /* Clear the extra character */
+          /* Move cursor back to position */
+          for( int i = cursor_pos; i < len; i++ )
+            printf( "\b" );
+          fflush( stdout );
           modified = true;
           }
         break;
         
-      case 4: /* Ctrl+D (Delete) */
+      case 4: /* Ctrl+D - delete character at cursor */
         if( cursor_pos < len )
           {
           memmove( buffer + cursor_pos, buffer + cursor_pos + 1, 
                    len - cursor_pos );
           len--;
+          /* Redraw from cursor to end, then clear extra char */
+          for( int i = cursor_pos; i < len; i++ )
+            printf( "%c", buffer[i] );
+          printf( " \b" );  /* Clear the extra character */
+          /* Move cursor back to position */
+          for( int i = cursor_pos; i < len; i++ )
+            printf( "\b" );
+          fflush( stdout );
           modified = true;
           }
         break;
@@ -576,17 +649,18 @@ bool edit_current_line_interactive( void )
           memmove( buffer + cursor_pos + 1, buffer + cursor_pos, 
                    len - cursor_pos + 1 );
           buffer[cursor_pos] = c;
+          /* Display the new character and redraw rest of line */
+          for( int i = cursor_pos; i <= len; i++ )
+            printf( "%c", buffer[i] );
+          /* Move cursor back to just after inserted character */
+          for( int i = cursor_pos + 1; i <= len; i++ )
+            printf( "\b" );
           cursor_pos++;
           len++;
+          fflush( stdout );
           modified = true;
           }
         break;
       }
-    
-    /* Redraw line */
-    printf( "\rEdit line %d: %-80s", current_addr(), buffer );
-    printf( "\r              " );  /* Move to start of content */
-    for( int i = 0; i < cursor_pos; i++ ) putchar( buffer[i] );
-    fflush( stdout );
     }
   }

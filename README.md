@@ -19,6 +19,18 @@
     
     Perfect for quick indentation without repeatedly pressing spacebar.
 
+- **Interactive Line Editing:** Press `ESC a` to edit the current line interactively.
+    - `←` `→` arrow keys to move cursor character by character
+    - `Ctrl+B` to move back one word
+    - `Ctrl+F` to move forward one word
+    - `Backspace` to delete previous character
+    - `Ctrl+D` to delete character at cursor
+    - Type normally to insert characters
+    - `Enter` to save changes
+    - `ESC` to cancel without saving
+    
+    Simple, clean line editing that integrates perfectly with ed's undo system!
+
 - **Page Navigation:** Enhanced page navigation commands.
     - `z` for page down (default ed behavior)
     - `Z` for page up (new feature)
